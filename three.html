@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!-- //importing tweenjs and cannon (we might not actually need tweenjs now as cannon is handling physics and therefore movement) -->
+    <script src="https://code.createjs.com/1.0.0/tweenjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.85.0/examples/js/controls/OrbitControls.js"></script>
+
+
+    <meta charset="utf-8">
+    <title>My first three.js app</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    
+    <script>
+
+    //creating our global variables
+    var world, mass, body, shape, timeStep=1/60, groundBody, groundShape,
+     camera, scene, renderer, geometry, material, mesh;
+
+     //call our initiatilisers and animate function
+     
+     //Calling our inititaliser to set up three.js
+     initThree();
+     // Initialising Cannon
+     initCannon();
+    //literally just begins the animation 
+    animate();
+     
+
+     //initialising Cannon (Our physics engine)
+     function initCannon() {
+      
+        world = new CANNON.World();
+        //here we are setting gravity to the world
+        world.gravity.set(0,0,-10);
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.interations = 10;
+
+        const groundMaterial = new CANNON.Material("groundMaterial");
+        const boxMaterial = new CANNON.Material("boxMaterial");
+        const boxGroundContactMaterial = new CANNON.ContactMaterial(boxMaterial, groundMaterial, {
+
+            friction: 0.3,
+            restitution: -1,
+            contactEquationStiffness:100
+        });
+        world.addContactMaterial(boxGroundContactMaterial);
+        shape = new CANNON.Box(new CANNON.Vec3(1,1,1));
+        mass = 1;
+        body = new CANNON.Body({
+
+            mass: 1,
+            material: boxMaterial
+        });
+
+        body.addShape(shape);
+
+        groundShape = new CANNON.Plane( new CANNON.Vec3(400,200,1))
+        groundBody = new CANNON.Body({ mass: 0, material:groundMaterial })
+        groundBody.addShape(groundShape);
+        groundBody.position.set(2, 40, -15);
+        
+
+        
+        //Adding velocity here, we can make it spin in any direction we want
+        body.angularVelocity.set(0,0,0);
+
+        body.angularDamping = 0.5;
+        world.addBody(groundBody)
+        world.addBody(body);
+        
+
+    
+     }
+
+     document.body.onkeyup = function(e){
+    if(e.keyCode == 32){
+        body.position.set(0,0,0);
+    }
+}
+     //initialising three js
+     function initThree() {
+
+    //creating THRE
+    scene = new THREE.Scene();
+    //setting camera perspective
+    camera = new THREE.PerspectiveCamera (75, window.innerWidth / window.innerHeight, 1, 100);
+    // setting camera position
+    camera.position.z = 5;
+    //Adding camera to the scene
+    scene.add( camera );
+
+    geometry = new THREE.BoxGeometry(1, 1, 1);
+    geometry1 = new THREE.PlaneGeometry( 400, 200, 1 );
+    material = new THREE.MeshBasicMaterial( {color: 0x00FF00});
+    material2 = new THREE.MeshBasicMaterial({color: 0x0fFFF00})
+    floor = new THREE.Mesh(geometry1, material2);
+    mesh = new THREE.Mesh( geometry, material );
+    scene.add ( mesh );
+    scene.add (floor);
+
+    renderer = new THREE.WebGLRenderer();
+    renderer.setSize( window.innerWidth, window.innerHeight);
+
+    document.body.appendChild( renderer.domElement );
+  //giving us control of the camera
+    const controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+
+     }
+
+     //animation function (Basically handles runnning the animation of our scene)
+     function animate() {
+     requestAnimationFrame( animate );
+     updatePhysics();
+     render();
+
+     }
+     //this is the physics updater for Cannon
+     function updatePhysics() {
+
+        //step the physics world
+
+        world.step(timeStep);
+
+        //Copy Coordinates from Cannon.js to Three.js
+        floor.position.copy(groundBody.position);
+        mesh.position.copy(body.position);
+        // mesh.quaternion.copy(body.quaternion);
+        // floor.quaternion.copy(groundBody.quaternion);
+
+   
+     }
+
+     function render() {
+         
+        renderer.render ( scene, camera );
+
+     }
+
+
+
+
+
+
+
+    </script>
+</body>
+
+</html>

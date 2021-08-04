@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!-- //importing three js and cannon (cannon is handling physics and therefore movement) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.85.0/examples/js/controls/OrbitControls.js"></script>
+
+
+    <meta charset="utf-8">
+    <title>Car Driving</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    
+    <script>
+        //creating global variables
+        var world, scene, renderer, camera, timeStep = 1/60, geometry, material,floor, groundBody, chassisShape, chassisBody, options, groundMaterial, wheelMaterial,
+         wheelGroundContactMaterial, vehicle, wheelBodies, cylinder;
+
+        //calling our initialisers
+       initCannon();
+       initThree();
+       animate();
+
+        
+
+        function initCannon(){
+            //literally creating the cannon world
+            world = new CANNON.World();
+            //creating gravity, and other shit
+            world.gravity.set(0,0,-20);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.interations = 10;
+            world.defaultContactMaterial.friction = 0;
+
+            //creating ground material interaction with wheel material
+
+            groundMaterial = new CANNON.Material("groundMaterial");
+
+            wheelMaterial = new CANNON.Material("wheelMaterial");
+
+            wheelGroundContactMaterial = new CANNON.ContactMaterial(wheelMaterial, groundMaterial,{
+                friction: 0.3,
+                restitution: 0,
+                contactEquationStiffness: 1000
+            });
+            //adding contact material interaction to the world
+            world.addContactMaterial(wheelGroundContactMaterial);
+
+            //creating the chassis of the car
+
+            chassisShape = new CANNON.Box(new CANNON.Vec3(2,1,0.5));
+            chassisBody = new CANNON.Body({mass:150});
+            chassisBody.addShape(chassisShape);
+            chassisBody.position.set(0,0,0);
+            chassisBody.angularVelocity.set(0, 0, 0);
+            // options for car and how it drives
+            options = {
+                radius: 0.5,
+                directionLocal: new CANNON.Vec3(0, 0, -1),
+                suspensionStiffness: 30,
+                suspensionRestLength: 0.3,
+                frictionSlip: 5,
+                dampingRelaxation: 2.3,
+                dampingCompression: 4.4,
+                maxSuspensionForce: 100000,
+                rollInfluence: 0.01,
+                axleLocal: new CANNON.Vec3(0, 1, 0),
+                chassisConnectionPointLocal: new CANNON.Vec3(1, 1, 0),
+                maxSuspensionTravel: 0.3,
+                customSlidingRotationalSpeed: -30,
+                useCustomSlidingRotationalSpeed: true
+
+
+            };
+
+            
+            //creating the vehicle
+            vehicle = new CANNON.RaycastVehicle({
+                chassisBody: chassisBody
+            }); 
+            //adding wheels and connecting them to the chassis
+
+            options.chassisConnectionPointLocal.set(1,1,0);
+            vehicle.addWheel(options);
+
+            options.chassisConnectionPointLocal.set(1,-1,0);
+            vehicle.addWheel(options);
+
+            options.chassisConnectionPointLocal.set(-1,1,0);
+            vehicle.addWheel(options);
+
+            options.chassisConnectionPointLocal.set(-1,-1,0);
+            vehicle.addWheel(options);
+            //adding the vehicle to the world
+            vehicle.addToWorld(world);
+            //creating our wheels body and shape for the car
+            wheelBodies = [];
+
+            for (var i=0; i<vehicle.wheelInfos.length; i++){
+            var wheel = vehicle.wheelInfos[i];
+            var cylinderShape = new CANNON.Cylinder(wheel.radius, wheel.radius, wheel.radius/2, 20);
+
+            var wheelBody = new CANNON.Body({mass: 1});
+            var q = new CANNON.Quaternion();
+            q.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), Math.PI / 2);
+            wheelBody.addShape(cylinderShape, new CANNON.Vec3(),q);
+            wheelBodies.push(wheelBody);
+            }
+
+            //update wheels
+            world.addEventListener('postStep', function(){
+
+                for (var i = 0; i < vehicle.wheelInfos.length; i++){
+                    vehicle.updateWheelTransform(i);
+                    var t = vehicle.wheelInfos[i].worldTransform;
+                    wheelBodies[i].position.copy(t.position);
+                    wheelBodies[i].quaternion.copy(t.quaternion);
+                }});
+
+
+            document.onkeydown = handler;
+            document.onkeyup = handler;
+
+            var maxSteerVal = 0.5;
+            var maxForce = 1000;
+            var brakeForce = 100000;
+            //steering and acceleration 
+            function handler(event){
+
+                var up = (event.type =='keyup');
+
+                if (!up && event.type !== 'keydown'){
+                    return;
+                }
+                vehicle.setBrake(0, 0);
+                vehicle.setBrake(0, 1);
+                vehicle.setBrake(0, 2);
+                vehicle.setBrake(0, 3);
+
+                switch(event.keyCode){
+
+                case 87://forward
+                vehicle.applyEngineForce(up ? 0 : -maxForce, 2);
+                vehicle.applyEngineForce(up ? 0 : -maxForce, 3);
+                break;
+
+                case 83: //backward
+                
+                vehicle.applyEngineForce(up ? 0 : maxForce, 2);
+                vehicle.applyEngineForce(up ? 0: maxForce, 3);
+                break;
+
+                case 68: //right
+                vehicle.setSteeringValue(up ? 0 : -maxSteerVal, 0);
+                vehicle.setSteeringValue(up ? 0 : -maxSteerVal, 1);
+                break;
+
+                case 65: //left
+                vehicle.setSteeringValue(up ? 0 : maxSteerVal, 0);
+                vehicle.setSteeringValue(up ? 0 : maxSteerVal, 1);
+                break;
+
+
+                
+                }
+
+
+                
+            }
+
+
+
+
+
+            
+
+            var groundShape = new CANNON.Plane(100,100,100);
+            groundBody = new CANNON.Body({ mass: 0, material: groundMaterial });
+            groundBody.addShape(groundShape);
+            groundBody.position.set(0,0,-5);
+            world.add(groundBody);
+
+
+            
+
+
+
+        }
+
+        function initThree(){
+            
+            scene = new THREE.Scene();
+            //setting camera perspective
+            camera = new THREE.PerspectiveCamera (75, window.innerWidth / window.innerHeight, 1, 100);
+            // setting camera position
+            camera.position.z = 5;
+
+
+            cylinder = new THREE.CylinderGeometry(.5,.5,.5,5);
+            material3 = new THREE.MeshBasicMaterial({color: 0x00FFFF});
+            wheelmesh1 = new THREE.Mesh(cylinder, material3);
+            wheelmesh2 = new THREE.Mesh(cylinder, material3);
+            wheelmesh3 = new THREE.Mesh(cylinder, material3);
+            wheelmesh4 = new THREE.Mesh(cylinder, material3);
+
+            cube = new THREE.BoxGeometry(2,1,0.5);
+            var material2 = new THREE.MeshBasicMaterial({color:0x00FFFF});
+            geometry = new THREE.PlaneGeometry(100,100,100);
+            material = new THREE.MeshBasicMaterial({color: 0xFFFFFF});
+            floor = new THREE.Mesh(geometry, material);
+            cubemesh = new THREE.Mesh(cube, material2);
+            scene.add(cubemesh);
+            scene.add(wheelmesh1);
+            scene.add(wheelmesh2);
+            scene.add(wheelmesh3);
+            scene.add(wheelmesh4);
+
+            scene.add(floor);
+
+            //Adding camera to the scene
+            scene.add( camera );
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize( window.innerWidth, window.innerHeight);
+
+            document.body.appendChild( renderer.domElement );
+            //giving us control of the camera
+            const controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+
+
+
+
+        }
+        
+
+
+        function animate(){
+            requestAnimationFrame(animate);
+            updatePhysics();
+            render();
+
+        }
+
+        function updatePhysics() {
+       world.step(timeStep);
+
+       floor.position.copy(groundBody.position);
+       cubemesh.position.copy(chassisBody.position);
+       cubemesh.quaternion.copy(chassisBody.quaternion);
+      
+     wheelmesh1.position.copy(wheelBodies[0].position);
+     wheelmesh2.position.copy(wheelBodies[1].position);
+     wheelmesh3.position.copy(wheelBodies[2].position);
+     wheelmesh4.position.copy(wheelBodies[3].position);
+
+     wheelmesh1.quaternion.copy(wheelBodies[0].quaternion);
+     wheelmesh2.quaternion.copy(wheelBodies[1].quaternion);
+     wheelmesh3.quaternion.copy(wheelBodies[2].quaternion);
+     wheelmesh4.quaternion.copy(wheelBodies[3].quaternion);
+
+
+    
+  
+
+       
+        }
+
+
+        function render() {
+         
+         renderer.render ( scene, camera );
+ 
+      }
+
+    </script>
+
+</body>
